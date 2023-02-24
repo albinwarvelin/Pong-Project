@@ -12,4 +12,6 @@ void move_l_paddle_up();
 void move_r_paddle_up();
 void move_l_paddle_down();
 void move_r_paddle_down();
+void ball_init();
+void ball_update();
 

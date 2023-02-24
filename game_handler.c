@@ -38,15 +38,24 @@ const int paddleDistance = 3; //Paddle distance from edge of display
 const int paddleSizeY = 8;
 const int paddleSizeX = 2;
 
+int ballX;
+int ballY;
+int ballDirX = 0; //0 Left 1 Right
+int ballDirY = 0; //0 Up 1 Down
+const int ballSpeed = 1;
+const int ballSize = 2;
+
+
 /* Interrupt Service Routine, runs game at 60fps */
 void user_isr( void )
 {	
-
 	matrix_to_array();
 	display_game(0, displayArray);
+	//volatile int* portf = (int*)0xBF886150;
+	//display_debug(portf);
 	
 	int btns = (PORTD & 0x000000e0) >> 5;
-	int btn1 = (PORTF & 0x00000001);
+	int btn1 = (PORTF & ~0x01) >> 1;
 	
 	if((btns & 0x4) != 0) //Button 4
 	{
@@ -59,13 +68,13 @@ void user_isr( void )
 	if((btns & 0x1) != 0) //Button 2
 	{
 		move_r_paddle_up();
-		move_l_paddle_up();
 	}
-	if((btn1) != 0) //Button 1
+	if((btn1 & 0x1) != 0) //Button 1
 	{
 		move_r_paddle_down();
-		move_l_paddle_up();
 	}
+	
+	ball_update();
 	
 	IFS(0) &= ~0x100; //Reset flag
 }
@@ -93,6 +102,8 @@ void game_init( void )
 	
 	paddle_l_init();
 	paddle_r_init();
+	delay(10);
+	ball_init();
 	return;
 }
 
@@ -209,7 +220,7 @@ void move_r_paddle_up()
 {
 	if(paddleRY > 0)
 	{		
-		for(x = 127 - paddleDistance - paddleSizeX; x < paddleDistance; x++)
+		for(x = 127 - paddleDistance - paddleSizeX; x < 127 - paddleDistance; x++)
 		{
 			display[x][paddleRY - 1] = 1;
 			display[x][paddleRY + paddleSizeY - 1] = 0;
@@ -222,11 +233,116 @@ void move_r_paddle_down()
 {
 	if(paddleRY < 31 - paddleSizeY)
 	{		
-		for(x = 127 - paddleDistance - paddleSizeX; x < paddleDistance; x++)
+		for(x = 127 - paddleDistance - paddleSizeX; x < 127 - paddleDistance; x++)
 		{
 			display[x][paddleRY - 1] = 0;
 			display[x][paddleRY + paddleSizeY - 1] = 1;
 		}
 		paddleRY++;
+	}
+}
+
+void ball_init()
+{
+	/*
+	int rand = TMR2; //Used as random int as it changes very fast
+	
+	if((TMR2 % 2) == 0)
+	{
+		ballDirX = 0; //Left
+	}
+	else
+	{
+		ballDirX = 1; //Right
+	}
+	if((TMR2 % 3) == 1)
+	{
+		ballDirY = 0; //Down
+	}
+	else
+	{
+		ballDirY = 1; //Up
+	}
+	
+	rand = TMR2; //New random int
+	
+	ballX = (128 / 2) - (ballSize / 2) - (rand % 10) + 5; //Random starting pos center +- 5
+	ballY = (32 / 2) - (ballSize / 2) - (rand % 6) + 3; //Random starting pos center +- 3
+	*/
+	
+	ballX = (128 / 2) - (ballSize / 2);
+	ballY = (32 / 2) - (ballSize / 2);
+}
+
+void ball_update()
+{
+	if(ballX <= paddleDistance + paddleSizeX) //Left paddle
+	{
+		if(ballY >= paddleLY && ballY <= paddleLY + paddleSizeY)
+		{
+			ballDirX ^= 1; //Invert directions
+			ballDirY ^= 1;
+		}
+	}
+	else if(ballX >= 127 - paddleDistance - paddleSizeX) //Right paddle
+	{
+		if(ballY >= paddleRY && ballY <= paddleRY + paddleSizeY)
+		{
+			ballDirX ^= 1; //Invert directions
+			ballDirY ^= 1;
+		}
+	}
+	
+	if(ballY <= 1) //Top bounce
+	{
+		ballDirY ^= 1;
+	}
+	if(ballY >= 30) //Bottom bounce
+	{
+		ballDirY ^= 1;
+	}
+	
+	if(ballX <= 0) //Right win
+	{
+		display[100][25] = 1;
+	}
+	if(ballX >= 127) //Left win
+	{
+		display[25][25] = 1;
+	}
+	
+	/* Move ball */
+	if(ballDirX) //Move right
+	{
+		ballX += ballSpeed;
+	}
+	else //Move left
+	{
+		ballX -= ballSpeed;
+	}
+	
+	if(ballDirY)
+	{
+		ballY += ballSpeed;
+	}
+	else
+	{
+		ballY -= ballSpeed;
+	}
+	
+	for(x = ballX - 1; x < ballX + ballSize + 1; x++) //Clear all pixels surrounding ball and where ball might have been
+	{
+		for(y = ballY - 1; y < ballY + ballSize + 1; y++)
+		{
+			display[x][y] = 0;
+		}
+	}
+	
+	for(x = ballX; x < ballX + ballSize; x++) //Clear all pixels surrounding ball and where ball might have been
+	{
+		for(y = ballY; y < ballY + ballSize; y++)
+		{
+			display[x][y] = 1;
+		}
 	}
 }
