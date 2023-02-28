@@ -57,12 +57,6 @@ int main(void) {
 	
 	display_init();
 	display_update();
-	
-	game_init(); /* Game initialization */
 
-	while( 1 )
-	{
-	  game_run(); /* Runs continuosly */
-	}
-	return 0;
+	game_init(); /* Game initialization, sets timer which game later solely runs on. */
 }

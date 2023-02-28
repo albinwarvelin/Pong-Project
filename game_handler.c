@@ -47,11 +47,8 @@ const int ballSpeedY = 1;
 const int ballSize = 2;
 int win = 0; //1 = left win, 2 = right win
 int firstWin = 0; //Used as a flag to not reset all bits when won if no need for it
-char leftWin[] = "Left wins!";
-char rightWin[] = "Right wins!";
 
-
-/* Interrupt Service Routine, runs game at 60fps */
+/* Interrupt Service Routine, runs game at 30fps */
 void user_isr( void )
 {	
 	if(!win)
@@ -116,7 +113,7 @@ void game_init( void )
 	TRISD |= 0xfe0; //Set port to input
 	
 	T2CON = 0x8070; //Prescaling 1:256
-	PR2 = 10417; //30 interrupts/second
+	PR2 = 10417; //30 interrupts/second (frames per second on display)
 	
 	IEC(0) |= 0x100; //Timer 2 interrupt enable
 	IPC(2) |= 0x1f; //Sets highest priorities
@@ -131,14 +128,14 @@ void game_init( void )
 		}
 	}
 	
+	/* Initializes game mechanics */
 	paddle_l_init();
 	paddle_r_init();
-	delay(10);
 	ball_init();
 	return;
 }
 
-/* Original code rewritten by Albin Warvelin in order to handle whole screen image (128*32) */
+/* Original code by F.Lundevall rewritten by Albin Warvelin in order to handle whole screen image (128*32) */
 void display_game(int x, const uint8_t *data) 
 {
 	int i, j;
@@ -159,7 +156,8 @@ void display_game(int x, const uint8_t *data)
 	}
 }
 
-/* Writes matrix data to single row array, utilizes global variables as they are used throughout the game */
+/* Writes matrix data to single row array, utilizes global variables as they are used throughout the game.
+   Display is updated in 8 bit columns along four rows, hence method. */
 void matrix_to_array()
 {
 	for(i = 0; i < 4; i++) //4 Segment rows
@@ -167,22 +165,17 @@ void matrix_to_array()
 		for(j = 0; j < 128; j++) //128 Columns
 		{
 			int col = 255;
-			for(k = 0; k < 8; k++) //8 bits columns
+			for(k = 0; k < 8; k++) //8 bits per column
 			{
-				col -= display[j][(i * 8) + k] * power(2, k);
-				displayArray[(128 * i) + j] = col;
+				col -= display[j][(i * 8) + k] * power(2, k); //On display high = pixel off and low = pixel on, therefore k power of 2 is subtracted from value if pixel shall be on.
+				
+				displayArray[(128 * i) + j] = col; //Adds to 1d array
 			}
 		}
 	}
 }
 
-/* Called repetitively from main, used for code that isn't updated each frame but continuosly */
-void game_run( void )
-{
-	
-}
-
-/* Math.h did not work */
+/* Math.h did not work, function returns a to the power of b */
 int power(int a, int b)
 {
 	int toReturn = 1;
@@ -195,11 +188,12 @@ int power(int a, int b)
 	return toReturn;
 }
 
+/* Initializes left paddle */
 void paddle_l_init()
 {
-	paddleLY = (32 / 2) - (paddleSizeY / 2);
+	paddleLY = (32 / 2) - (paddleSizeY / 2); //Start pos
 	
-	for(x = paddleDistance; x < paddleDistance + paddleSizeX; x++)
+	for(x = paddleDistance; x < paddleDistance + paddleSizeX; x++) //Draw paddle
 	{
 		for(y = paddleLY; y < paddleLY + paddleSizeY; y++)
 		{
@@ -207,12 +201,12 @@ void paddle_l_init()
 		}
 	}
 }
-
+ /* Initializes right paddle */
 void paddle_r_init()
 {
-	paddleRY = (32 / 2) - (paddleSizeY / 2);
+	paddleRY = (32 / 2) - (paddleSizeY / 2); //Start pos
 	
-	for(x = 127 - paddleDistance - paddleSizeX; x < 127 - paddleDistance; x++)
+	for(x = 127 - paddleDistance - paddleSizeX; x < 127 - paddleDistance; x++) //Draw paddle
 	{
 		for(y = paddleRY; y < paddleRY + paddleSizeY; y++)
 		{
@@ -221,78 +215,84 @@ void paddle_r_init()
 	}
 }
 
+/* Moves left paddle up by 1 */
 void move_l_paddle_up()
 {
 	if(paddleLY > 0)
 	{		
 		for(x = paddleDistance; x < paddleDistance + paddleSizeX; x++)
 		{
-			display[x][paddleLY - 1] = 1;
-			display[x][paddleLY + paddleSizeY - 1] = 0;
+			display[x][paddleLY] = 1; //Sets pixels on top row high (on)
+			display[x][paddleLY + paddleSizeY] = 0;  //Sets pixels on bottom row low (off)
 		}
 		paddleLY--;
 	}	
 }
 
+/* Moves paddle down by 1 */
 void move_l_paddle_down()
 {
 	if(paddleLY < 31 - paddleSizeY)
 	{		
 		for(x = paddleDistance; x < paddleDistance + paddleSizeX; x++)
 		{
-			display[x][paddleLY - 1] = 0;
-			display[x][paddleLY + paddleSizeY - 1] = 1;
+			display[x][paddleLY] = 0; //Sets pixels on top row low (off)
+			display[x][paddleLY + paddleSizeY] = 1; //Sets pixels on bottom row high (on)
 		}
 		paddleLY++;
 	}
 }
 
+/* Moves paddle up by 1 */
 void move_r_paddle_up()
 {
 	if(paddleRY > 0)
 	{		
 		for(x = 127 - paddleDistance - paddleSizeX; x < 127 - paddleDistance; x++)
 		{
-			display[x][paddleRY - 1] = 1;
-			display[x][paddleRY + paddleSizeY - 1] = 0;
+			display[x][paddleRY] = 1; //Sets pixels on top row high (on)
+			display[x][paddleRY + paddleSizeY] = 0; //Sets pixels on bottom row low (off)
 		}
 		paddleRY--;
 	}
 }
 
+/* Moves paddle down by 1 */ 
 void move_r_paddle_down()
 {
 	if(paddleRY < 31 - paddleSizeY)
 	{		
 		for(x = 127 - paddleDistance - paddleSizeX; x < 127 - paddleDistance; x++)
 		{
-			display[x][paddleRY - 1] = 0;
-			display[x][paddleRY + paddleSizeY - 1] = 1;
+			display[x][paddleRY] = 0; //Sets pixels on top row low (off)
+			display[x][paddleRY + paddleSizeY] = 1; //Sets pixels on bottom row high (on)
 		}
 		paddleRY++;
 	}
 }
 
+/* Initializes ball */ 
 void ball_init()
 {	
-	ballX = (128 / 2) - (ballSize / 2) - 3;
+	ballX = (128 / 2) - (ballSize / 2) - 2;
 	ballY = (32 / 2) - (ballSize / 2) + 4;
 }
 
+/* Updates ball position and checks if win, when win variables is updated */
 void ball_update()
 {
 	if(ballX <= paddleDistance + paddleSizeX) //Left paddle
 	{
 		if(ballY >= paddleLY && ballY <= paddleLY + paddleSizeY)
 		{
-			ballDirX ^= 1; //Invert directions
+			ballDirX ^= 1; //Invert direction
 		}
 	}
 	else if(ballX >= 127 - paddleDistance - paddleSizeX) //Right paddle
 	{
 		if(ballY >= paddleRY && ballY <= paddleRY + paddleSizeY)
 		{
-			ballDirX ^= 1; //Invert directions
+			ballDirX ^= 1; //Invert direction
 		}
 	}
 	
@@ -307,12 +307,12 @@ void ball_update()
 	
 	if(ballX <= 0) //Right win
 	{
-		win = 1;
+		win = 2;
 		firstWin = 1;
 	}
 	if(ballX >= 127) //Left win
 	{
-		win = 2;
+		win = 1;
 		firstWin = 1;
 	}
 	
@@ -347,7 +347,7 @@ void ball_update()
 		}
 	}
 	
-	for(x = ballX; x < ballX + ballSize; x++) //Clear all pixels surrounding ball and where ball might have been
+	for(x = ballX; x < ballX + ballSize; x++) //Set pixels of ball high
 	{
 		for(y = ballY; y < ballY + ballSize; y++)
 		{
