@@ -42,41 +42,72 @@ int ballX;
 int ballY;
 int ballDirX = 0; //0 Left 1 Right
 int ballDirY = 0; //0 Up 1 Down
-const int ballSpeed = 1;
+const int ballSpeedX = 1;
+const int ballSpeedY = 1;
 const int ballSize = 2;
+int win = 0; //1 = left win, 2 = right win
+int firstWin = 0; //Used as a flag to not reset all bits when won if no need for it
+char leftWin[] = "Left wins!";
+char rightWin[] = "Right wins!";
 
 
 /* Interrupt Service Routine, runs game at 60fps */
 void user_isr( void )
 {	
-	matrix_to_array();
-	display_game(0, displayArray);
-	//volatile int* portf = (int*)0xBF886150;
-	//display_debug(portf);
-	
-	int btns = (PORTD & 0x000000e0) >> 5;
-	int btn1 = (PORTF & ~0x01) >> 1;
-	
-	if((btns & 0x4) != 0) //Button 4
+	if(!win)
 	{
-		move_l_paddle_up();
-	}
-	if((btns & 0x2) != 0) //Button 3
+		matrix_to_array();
+		display_game(0, displayArray);
+		
+		int btns = (PORTD & 0x000000e0) >> 5;
+		int btn1 = (PORTF & ~0x01) >> 1;
+		
+		if((btns & 0x4) != 0) //Button 4
+		{
+			move_l_paddle_up();
+		}
+		if((btns & 0x2) != 0) //Button 3
+		{
+			move_l_paddle_down();
+		}
+		if((btns & 0x1) != 0) //Button 2
+		{
+			move_r_paddle_up();
+		}
+		if((btn1 & 0x1) != 0) //Button 1
+		{
+			move_r_paddle_down();
+		}
+		
+		ball_update();
+		
+		IFS(0) &= ~0x100; //Reset flag
+	}	
+	else 
 	{
-		move_l_paddle_down();
+		if(firstWin)
+		{
+			for(x = 0; x < 128; x++)
+			{
+				for(y = 0; y < 32; y++)
+				{
+					display[x][y] = 0;
+				}
+			}
+			matrix_to_array();
+			display_game(0, displayArray);
+			firstWin = 0;
+		}
+		if(win == 1)
+		{
+			display_string(2, "Left wins!");
+		}
+		if(win == 2)
+		{
+			display_string(2, "Right wins!");
+		}
+		display_update();
 	}
-	if((btns & 0x1) != 0) //Button 2
-	{
-		move_r_paddle_up();
-	}
-	if((btn1 & 0x1) != 0) //Button 1
-	{
-		move_r_paddle_down();
-	}
-	
-	ball_update();
-	
-	IFS(0) &= ~0x100; //Reset flag
 }
 
 /* Initialization here, run before game */
@@ -243,35 +274,9 @@ void move_r_paddle_down()
 }
 
 void ball_init()
-{
-	/*
-	int rand = TMR2; //Used as random int as it changes very fast
-	
-	if((TMR2 % 2) == 0)
-	{
-		ballDirX = 0; //Left
-	}
-	else
-	{
-		ballDirX = 1; //Right
-	}
-	if((TMR2 % 3) == 1)
-	{
-		ballDirY = 0; //Down
-	}
-	else
-	{
-		ballDirY = 1; //Up
-	}
-	
-	rand = TMR2; //New random int
-	
-	ballX = (128 / 2) - (ballSize / 2) - (rand % 10) + 5; //Random starting pos center +- 5
-	ballY = (32 / 2) - (ballSize / 2) - (rand % 6) + 3; //Random starting pos center +- 3
-	*/
-	
-	ballX = (128 / 2) - (ballSize / 2);
-	ballY = (32 / 2) - (ballSize / 2);
+{	
+	ballX = (128 / 2) - (ballSize / 2) - 3;
+	ballY = (32 / 2) - (ballSize / 2) + 4;
 }
 
 void ball_update()
@@ -281,7 +286,6 @@ void ball_update()
 		if(ballY >= paddleLY && ballY <= paddleLY + paddleSizeY)
 		{
 			ballDirX ^= 1; //Invert directions
-			ballDirY ^= 1;
 		}
 	}
 	else if(ballX >= 127 - paddleDistance - paddleSizeX) //Right paddle
@@ -289,52 +293,57 @@ void ball_update()
 		if(ballY >= paddleRY && ballY <= paddleRY + paddleSizeY)
 		{
 			ballDirX ^= 1; //Invert directions
-			ballDirY ^= 1;
 		}
 	}
 	
-	if(ballY <= 1) //Top bounce
+	if(ballY <= ballSpeedY) //Top bounce
 	{
 		ballDirY ^= 1;
 	}
-	if(ballY >= 30) //Bottom bounce
+	if(ballY >= 31 - ballSpeedY) //Bottom bounce
 	{
 		ballDirY ^= 1;
 	}
 	
 	if(ballX <= 0) //Right win
 	{
-		display[100][25] = 1;
+		win = 1;
+		firstWin = 1;
 	}
 	if(ballX >= 127) //Left win
 	{
-		display[25][25] = 1;
+		win = 2;
+		firstWin = 1;
 	}
 	
 	/* Move ball */
 	if(ballDirX) //Move right
 	{
-		ballX += ballSpeed;
+		ballX += ballSpeedX;
 	}
 	else //Move left
 	{
-		ballX -= ballSpeed;
+		ballX -= ballSpeedX;
 	}
 	
-	if(ballDirY)
+	if(ballDirY) //Move down
 	{
-		ballY += ballSpeed;
+		ballY += ballSpeedY;
 	}
-	else
+	else //Move up
 	{
-		ballY -= ballSpeed;
+		ballY -= ballSpeedY;
 	}
 	
-	for(x = ballX - 1; x < ballX + ballSize + 1; x++) //Clear all pixels surrounding ball and where ball might have been
+	for(x = ballX - ballSpeedX; x < ballX + ballSize + ballSpeedX; x++) //Clear all pixels surrounding ball and where ball might have been
 	{
-		for(y = ballY - 1; y < ballY + ballSize + 1; y++)
+		for(y = ballY - ballSpeedY; y < ballY + ballSize + ballSpeedY; y++)
 		{
-			display[x][y] = 0;
+			if(!(y >= paddleLY && y < paddleLY + paddleSizeY && x >= paddleDistance && x < paddleDistance + paddleSizeX) //Exempts left paddle pixels
+				&& !(y >= paddleRY && y < paddleRY + paddleSizeY && x >= 127 - paddleDistance - paddleSizeX && x < 127 - paddleDistance)) //Exempts right paddle pixels
+			{
+				display[x][y] = 0;
+			}
 		}
 	}
 	
